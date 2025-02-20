@@ -30,6 +30,33 @@ interface Course {
   }>;
 }
 
+const getConsecutiveSlots = (course: Course, dayKey: string, slot: string, timeSlots: string[]) => {
+  const slots = course.time[dayKey as keyof typeof course.time];
+  const currentIndex = timeSlots.indexOf(slot);
+  let consecutiveCount = 1;
+  
+  // Check next slots
+  let nextIndex = currentIndex + 1;
+  while (nextIndex < timeSlots.length && slots.includes(timeSlots[nextIndex])) {
+    consecutiveCount++;
+    nextIndex++;
+  }
+  
+  return {
+    isStart: !slots.includes(timeSlots[currentIndex - 1]),
+    consecutiveCount,
+  };
+};
+
+// Update the getTextSizeClass helper function
+const getTextSizeClass = (consecutiveCount: number): string => {
+  // Base text size on course block height
+  if (consecutiveCount >= 4) return 'text-xl;';
+  if (consecutiveCount >= 3) return 'text-lg';
+  if (consecutiveCount >= 2) return 'text-base';
+  return 'text-xs';
+};
+
 const CourseScheduler = () => {
   const availableCourses: Course[] = [
     {
@@ -200,20 +227,44 @@ const CourseScheduler = () => {
                     {days.map((day, index) => {
                       const dayKey = ['mon', 'tue', 'wed', 'thu', 'fri'][index];
                       return (
-                        <td key={`${day}-${slot}`} className="border p-2 w-40 h-16">
+                        <td key={`${day}-${slot}`} className="border p-0 w-40 h-16 relative">
                           {selectedCourses.map(course => {
                             if (course.time[dayKey as keyof typeof course.time].includes(slot)) {
-                              return (
-                                <div 
-                                  key={course.id} 
-                                  className={`${getCourseColor(course.courseType)} p-1 rounded mb-1 w-full break-words`}
-                                >
-                                  <div className="font-semibold text-sm leading-tight">{course.name.zh}</div>
-                                  <div className="text-xs mt-1">
-                                    {course.classroom.map(room => room.name).join(', ')}
+                              const { isStart, consecutiveCount } = getConsecutiveSlots(course, dayKey, slot, timeSlots);
+                              
+                              if (isStart) {
+                                return (
+                                  // Update the course block rendering div
+                                  <div 
+                                    key={course.id} 
+                                    className={`${getCourseColor(course.courseType)} absolute inset-0 p-2 overflow-hidden flex flex-col`}
+                                    style={{
+                                      height: `${consecutiveCount * 4}rem`,
+                                      zIndex: 10
+                                    }}
+                                  >
+                                    {/* Course name - taking about 70% of the space */}
+                                    <div 
+                                      className={`font-semibold leading-tight ${getTextSizeClass(consecutiveCount)} flex-grow`}
+                                      style={{ 
+                                        fontSize: `${Math.max(0.7, consecutiveCount * 0.35)}rem`,
+                                        maxHeight: '70%'
+                                      }}
+                                    >
+                                      {course.name.zh}
+                                    </div>
+                                    {/* Classroom info - taking remaining space */}
+                                    <div 
+                                      className="mt-1 truncate"
+                                      style={{ 
+                                        fontSize: `${Math.max(0.5, consecutiveCount * 0.25)}rem`
+                                      }}
+                                    >
+                                      {course.classroom.map(room => room.name).join(', ')}
+                                    </div>
                                   </div>
-                                </div>
-                              );
+                                );
+                              }
                             }
                             return null;
                           })}
