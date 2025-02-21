@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Input } from '@/components/ui/input';
 
 interface Course {
   id: string;
@@ -13,7 +14,9 @@ interface Course {
     zh: string;
     en: string;
   };
-  courseType: string;
+  courseType: string; //added 
+  credit: string;  //added
+  hours: string
   time: {
     sun: string[];
     mon: string[];
@@ -48,6 +51,14 @@ const getConsecutiveSlots = (course: Course, dayKey: string, slot: string, timeS
   };
 };
 
+// 新增計算總學分和總時數的函數
+const calculateTotals = (courses: Course[]) => {
+  return courses.reduce((acc, course) => ({
+    totalCredits: acc.totalCredits + parseFloat(course.credit),
+    totalHours: acc.totalHours + parseInt(course.hours)
+  }), { totalCredits: 0, totalHours: 0 });
+};
+
 const CourseScheduler = () => {
   const availableCourses: Course[] = [
     {
@@ -58,6 +69,8 @@ const CourseScheduler = () => {
         "en": "Teaching Practicum for the Area of Civil Engineering and Architecture Subjects"
       },
       "courseType": "▲",
+      "credit": "3.0",
+    "hours": "3",
       "time": {
         "sun": [],
         "mon": [],
@@ -77,6 +90,8 @@ const CourseScheduler = () => {
         "en": "Cultural Technology"
       },
       "courseType": "▲",
+      "credit": "2.0",
+      "hours": "2",
       "time": {
         "sun": [],
         "mon": [],
@@ -98,6 +113,7 @@ const CourseScheduler = () => {
 
   const [selectedCourses, setSelectedCourses] = useState<Course[]>([]);
   const [conflicts, setConflicts] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const getCourseColor = (courseType: string): string => {
     const colorMap: { [key: string]: string } = {
@@ -152,24 +168,37 @@ const CourseScheduler = () => {
     setConflicts([]);
   };
 
+  const filteredCourses = availableCourses.filter(course => 
+    course.name.zh.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    course.name.en.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    course.code.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   const days = ['一', '二', '三', '四', '五'];
   const timeSlots = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D'];
 
   return (
-    <div className="h-screen p-4">
-      <div className="flex flex-row gap-4 h-[calc(100vh-2rem)]">
+    <div className="min-h-screen p-4">
+      <div className="flex flex-col lg:flex-row gap-4">
         {/* Left side - Course selection controls */}
-        <div className="w-1/4 min-w-[250px] overflow-y-auto">
-          <Card className="sticky top-0">
+        <div className="w-full lg:w-1/4 lg:min-w-[250px]">
+          <Card className="mb-4 lg:sticky lg:top-0">
             <CardHeader>
               <CardTitle>課程選擇</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
+                <Input
+                  type="search"
+                  placeholder="搜尋課程名稱或代碼..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="mb-4"
+                />
                 <div>
                   <h3 className="font-semibold mb-2">可選課程</h3>
                   <div className="flex flex-col gap-2">
-                    {availableCourses.map(course => (
+                    {filteredCourses.map(course => (
                       <Button
                         key={course.id}
                         onClick={() => addCourse(course)}
@@ -213,30 +242,44 @@ const CourseScheduler = () => {
         </div>
 
         {/* Right side - Timetable */}
-        <div className="flex-1 overflow-hidden">
-          <Card className="h-full flex flex-col">
+        <div className="w-full lg:flex-1">
+          <Card className="lg:min-w-[640px]">
             <CardHeader className="flex-none">
-              <CardTitle>週課表</CardTitle>
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+                <CardTitle>週課表</CardTitle>
+                {selectedCourses.length > 0 && (
+                  <div className="text-sm text-muted-foreground">
+                    {(() => {
+                      const { totalCredits, totalHours } = calculateTotals(selectedCourses);
+                      return (
+                        <>
+                          <span className="font-bold">總學分</span>：{totalCredits.toFixed(1)} / <span className="font-bold">總時數</span>：{totalHours}
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
             </CardHeader>
-            <CardContent className="flex-1 overflow-auto p-0">
+            <CardContent className="p-0">
               <div className="h-full">
-                <table className="w-full border-collapse table-fixed">
+                <table className="w-full border-collapse">
                   <thead className="sticky top-0 bg-white z-20">
                     <tr>
-                      <th className="border p-2 w-16">節次</th>
+                      <th className="border p-1 lg:p-2 w-8 lg:w-16 text-xs lg:text-base">節次</th>
                       {days.map(day => (
-                        <th key={day} className="border p-2">週{day}</th>
+                        <th key={day} className="border p-1 lg:p-2 text-xs lg:text-base">週{day}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {timeSlots.map(slot => (
                       <tr key={slot}>
-                        <td className="border p-2 text-center">{slot}</td>
+                        <td className="border p-1 lg:p-2 text-center text-xs lg:text-base">{slot}</td>
                         {days.map((day, index) => {
                           const dayKey = ['mon', 'tue', 'wed', 'thu', 'fri'][index];
                           return (
-                            <td key={`${day}-${slot}`} className="border p-0 h-16 relative">
+                            <td key={`${day}-${slot}`} className="border p-0 h-12 lg:h-16 relative">
                               {selectedCourses.map(course => {
                                 if (course.time[dayKey as keyof typeof course.time].includes(slot)) {
                                   const { isStart, consecutiveCount } = getConsecutiveSlots(course, dayKey, slot, timeSlots);
@@ -245,22 +288,16 @@ const CourseScheduler = () => {
                                     return (
                                       <div 
                                         key={course.id} 
-                                        className={`${getCourseColor(course.courseType)} absolute inset-0 p-2 overflow-hidden flex flex-col`}
+                                        className={`${getCourseColor(course.courseType)} absolute inset-0 p-1 lg:p-2 overflow-hidden flex flex-col`}
                                         style={{
-                                          height: `${consecutiveCount * 4}rem`,
+                                          height: `${consecutiveCount * 3}rem`,
                                           zIndex: 10
                                         }}
                                       >
-                                        {/* Course name - fixed font size */}
-                                        <div 
-                                          className="font-semibold leading-tight text-base flex-grow"
-                                        >
+                                        <div className="font-semibold leading-tight text-xs lg:text-base flex-grow">
                                           {course.name.zh}
                                         </div>
-                                        {/* Classroom info - fixed smaller font size */}
-                                        <div 
-                                          className="mt-1 truncate text-sm"
-                                        >
+                                        <div className="mt-0.5 lg:mt-1 truncate text-xs lg:text-sm">
                                           {course.classroom.map(room => room.name).join(', ')}
                                         </div>
                                       </div>
