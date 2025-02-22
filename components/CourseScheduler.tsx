@@ -1,11 +1,12 @@
-'use client'
+'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
+import debounce from 'lodash/debounce';
 
 interface Course {
   id: string;
@@ -14,9 +15,9 @@ interface Course {
     zh: string;
     en: string;
   };
-  courseType: string; //added 
-  credit: string;  //added
-  hours: string
+  courseType: string;
+  credit: string;
+  hours: string;
   time: {
     sun: string[];
     mon: string[];
@@ -33,7 +34,12 @@ interface Course {
   }>;
 }
 
-const getConsecutiveSlots = (course: Course, dayKey: string, slot: string, timeSlots: string[]) => {
+const getConsecutiveSlots = (
+  course: Course,
+  dayKey: string,
+  slot: string,
+  timeSlots: string[]
+) => {
   const slots = course.time[dayKey as keyof typeof course.time];
   const currentIndex = timeSlots.indexOf(slot);
   let consecutiveCount = 1;
@@ -51,69 +57,50 @@ const getConsecutiveSlots = (course: Course, dayKey: string, slot: string, timeS
   };
 };
 
-// 新增計算總學分和總時數的函數
 const calculateTotals = (courses: Course[]) => {
-  return courses.reduce((acc, course) => ({
-    totalCredits: acc.totalCredits + parseFloat(course.credit),
-    totalHours: acc.totalHours + parseInt(course.hours)
-  }), { totalCredits: 0, totalHours: 0 });
+  return courses.reduce(
+    (acc, course) => ({
+      totalCredits: acc.totalCredits + parseFloat(course.credit),
+      totalHours: acc.totalHours + parseInt(course.hours),
+    }),
+    { totalCredits: 0, totalHours: 0 }
+  );
 };
 
-const CourseScheduler = () => {
-  const availableCourses: Course[] = [
-    {
-      "code": "0463023",
-      "id": "339241",
-      "name": {
-        "zh": "土木與建築群教學實習",
-        "en": "Teaching Practicum for the Area of Civil Engineering and Architecture Subjects"
-      },
-      "courseType": "▲",
-      "credit": "3.0",
-    "hours": "3",
-      "time": {
-        "sun": [],
-        "mon": [],
-        "tue": ["A", "B", "C", "D"],
-        "wed": [],
-        "thu": [],
-        "fri": [],
-        "sat": []
-      },
-      "classroom": []
-    },
-    {
-      "code": "A501016",
-      "id": "341857",
-      "name": {
-        "zh": "文化科技",
-        "en": "Cultural Technology"
-      },
-      "courseType": "▲",
-      "credit": "2.0",
-      "hours": "2",
-      "time": {
-        "sun": [],
-        "mon": [],
-        "tue": [],
-        "wed": [],
-        "thu": ["3", "4"],
-        "fri": [],
-        "sat": []
-      },
-      "classroom": [
-        {
-          "name": "共同312",
-          "link": "Croom.jsp?format=-3&year=113&sem=2&code=154",
-          "code": "154"
-        }
-      ]
-    }
-  ];
-
+const TestCourseScheduler = () => {
+  const [availableCourses, setAvailableCourses] = useState<Course[]>([]);
   const [selectedCourses, setSelectedCourses] = useState<Course[]>([]);
   const [conflicts, setConflicts] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showAvailableCourses, setShowAvailableCourses] = useState(true);
+
+  // 實作去抖動的搜尋
+  const debouncedFetch = useCallback(
+    debounce(async (query: string) => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const queryParam = query ? `?q=${encodeURIComponent(query)}` : '';
+        const res = await fetch(`/api/${queryParam}`);
+        if (!res.ok) throw new Error('課程資料載入失敗');
+        const data = await res.json();
+        setAvailableCourses(data.courses);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '發生未知錯誤');
+        console.error('Failed to fetch courses:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    }, 300),
+    []
+  );
+
+  useEffect(() => {
+    debouncedFetch(searchQuery);
+    return () => debouncedFetch.cancel();
+  }, [searchQuery, debouncedFetch]);
 
   const getCourseColor = (courseType: string): string => {
     const colorMap: { [key: string]: string } = {
@@ -141,34 +128,37 @@ const CourseScheduler = () => {
     return false;
   };
 
-  const addCourse = (course: Course) => {
-    // Check if course is already selected
-    const isDuplicate = selectedCourses.some(selected => selected.id === course.id);
-    if (isDuplicate) {
-      setConflicts([...conflicts, `重複選課：${course.name.zh}`]);
+  const addCourse = useCallback((course: Course) => {
+    setConflicts([]);  // 清除之前的衝突
+    
+    // 檢查重複選課
+    if (selectedCourses.some(selected => selected.id === course.id)) {
+      setConflicts(prev => [...prev, `重複選課：${course.name.zh}`]);
       return;
     }
 
-    // Check for time conflicts
-    const hasConflict = selectedCourses.some(selected => 
+    // 檢查時間衝突
+    const conflictingCourse = selectedCourses.find(selected => 
       checkTimeConflict(selected, course)
     );
 
-    if (hasConflict) {
-      setConflicts([...conflicts, `時間衝突：${course.name.zh}`]);
+    if (conflictingCourse) {
+      setConflicts(prev => [...prev, 
+        `時間衝突：${course.name.zh} 與 ${conflictingCourse.name.zh}`
+      ]);
       return;
     }
 
-    setSelectedCourses([...selectedCourses, course]);
-    setConflicts([]);
-  };
+    setSelectedCourses(prev => [...prev, course]);
+  }, [selectedCourses]);
 
-  const removeCourse = (courseId: string) => {
-    setSelectedCourses(selectedCourses.filter(course => course.id !== courseId));
+  const removeCourse = useCallback((courseId: string) => {
+    setSelectedCourses(prev => prev.filter(course => course.id !== courseId));
     setConflicts([]);
-  };
+  }, []);
 
-  const filteredCourses = availableCourses.filter(course => 
+  // We use the availableCourses state that now comes from our API.
+  const filteredCourses = availableCourses.filter(course =>
     course.name.zh.toLowerCase().includes(searchQuery.toLowerCase()) ||
     course.name.en.toLowerCase().includes(searchQuery.toLowerCase()) ||
     course.code.toLowerCase().includes(searchQuery.toLowerCase())
@@ -180,14 +170,15 @@ const CourseScheduler = () => {
   return (
     <div className="min-h-screen p-4">
       <div className="flex flex-col lg:flex-row gap-4">
-        {/* Left side - Course selection controls */}
-        <div className="w-full lg:w-1/4 lg:min-w-[250px]">
-          <Card className="mb-4 lg:sticky lg:top-0">
+        {/* Left side - Course selection */}
+        <div className="w-full lg:w-1/4 lg:min-w-[250px] flex flex-col">
+          {/* 課程選擇 Card */}
+          <Card className={`mb-4 ${showAvailableCourses ? 'h-[50vh]' : ''}`}>
             <CardHeader>
               <CardTitle>課程選擇</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
+            <CardContent className="h-[calc(100%-4rem)] overflow-hidden">
+              <div className="flex flex-col h-full">
                 <Input
                   type="search"
                   placeholder="搜尋課程名稱或代碼..."
@@ -195,48 +186,69 @@ const CourseScheduler = () => {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="mb-4"
                 />
-                <div>
-                  <h3 className="font-semibold mb-2">可選課程</h3>
-                  <div className="flex flex-col gap-2">
-                    {filteredCourses.map(course => (
-                      <Button
-                        key={course.id}
-                        onClick={() => addCourse(course)}
-                        className={`w-full justify-start ${getCourseColor(course.courseType)}`}
-                        variant="outline"
-                      >
-                        {course.name.zh} ({course.code})
-                      </Button>
-                    ))}
+                <div className="flex-1 overflow-hidden">
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-semibold">可選課程</h3>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowAvailableCourses(!showAvailableCourses)}
+                      className="h-8 px-2"
+                    >
+                      {showAvailableCourses ? '收合' : '展開'}
+                    </Button>
                   </div>
-                </div>
-                <div>
-                  <h3 className="font-semibold mb-2">已選課程</h3>
-                  <div className="flex flex-col gap-2">
-                    {selectedCourses.map(course => (
-                      <Button
-                        key={course.id}
-                        onClick={() => removeCourse(course.id)}
-                        className={`w-full justify-start ${getCourseColor(course.courseType)}`}
-                        variant="secondary"
-                      >
-                        {course.name.zh} ❌
-                      </Button>
-                    ))}
-                  </div>
+                  {showAvailableCourses && (
+                    <div className="h-full overflow-y-auto">
+                      <div className="flex flex-col gap-2">
+                        {filteredCourses.map(course => (
+                          <Button
+                            key={course.id}
+                            onClick={() => addCourse(course)}
+                            className={`w-full justify-start ${getCourseColor(course.courseType)}`}
+                            variant="outline"
+                          >
+                            {course.name.zh} ({course.code})
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
+            </CardContent>
+          </Card>
 
-              {conflicts.length > 0 && (
-                <Alert variant="destructive" className="mt-4">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    {conflicts.map((conflict, index) => (
-                      <div key={index}>{conflict}</div>
-                    ))}
-                  </AlertDescription>
-                </Alert>
-              )}
+          {/* 已選課程 Card */}
+          <Card className={`mb-4 ${showAvailableCourses ? 'h-[50vh]' : ''}`}>
+            <CardHeader>
+              <CardTitle>已選課程</CardTitle>
+            </CardHeader>
+            <CardContent className="h-[calc(100%-4rem)] overflow-hidden">
+              <div className="h-full overflow-y-auto">
+                <div className="flex flex-col gap-2">
+                  {selectedCourses.map(course => (
+                    <Button
+                      key={course.id}
+                      onClick={() => removeCourse(course.id)}
+                      className={`w-full justify-start ${getCourseColor(course.courseType)}`}
+                      variant="secondary"
+                    >
+                      {course.name.zh} ❌
+                    </Button>
+                  ))}
+                </div>
+                {conflicts.length > 0 && (
+                  <Alert variant="destructive" className="mt-4">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      {conflicts.map((conflict, index) => (
+                        <div key={index}>{conflict}</div>
+                      ))}
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -283,7 +295,6 @@ const CourseScheduler = () => {
                               {selectedCourses.map(course => {
                                 if (course.time[dayKey as keyof typeof course.time].includes(slot)) {
                                   const { isStart, consecutiveCount } = getConsecutiveSlots(course, dayKey, slot, timeSlots);
-                                  
                                   if (isStart) {
                                     return (
                                       <div 
@@ -318,8 +329,19 @@ const CourseScheduler = () => {
           </Card>
         </div>
       </div>
+
+      {error && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+      
+      {isLoading && (
+        <div className="text-center py-4">載入中...</div>
+      )}
     </div>
   );
 };
 
-export default CourseScheduler;
+export default TestCourseScheduler;
