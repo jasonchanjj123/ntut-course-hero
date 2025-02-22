@@ -7,6 +7,7 @@ import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import debounce from 'lodash/debounce';
+import { useLanguage } from '@/app/contexts/LanguageContext';
 
 interface Course {
   id: string;
@@ -78,6 +79,8 @@ const calculateTotals = (courses: Course[]) => {
 };
 
 const CourseScheduler = () => {
+  const { language } = useLanguage();
+  
   const [availableCourses, setAvailableCourses] = useState<Course[]>([]);
   const [selectedCourses, setSelectedCourses] = useState<Course[]>([]);
   const [conflicts, setConflicts] = useState<string[]>([]);
@@ -193,6 +196,7 @@ const CourseScheduler = () => {
   );
 
   const days = ['一', '二', '三', '四', '五'];
+  const daysInEnglish = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
   const timeSlots = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D'];
 
   return (
@@ -201,29 +205,33 @@ const CourseScheduler = () => {
         {/* Left side - Course selection */}
         <div className="w-full lg:w-1/4 lg:min-w-[250px] flex flex-col">
           {/* 課程選擇 Card */}
-          <Card className={`mb-4 ${showAvailableCourses ? 'h-[50vh]' : ''}`}>
+          <Card className={` mb-0 ${showAvailableCourses ? 'h-[50vh]' : ''}`}>
             <CardHeader>
-              <CardTitle>課程選擇</CardTitle>
+              <CardTitle>{language === 'zh' ? '課程選擇' : 'Course Selection'}</CardTitle>
             </CardHeader>
-            <CardContent className="h-[calc(100%-4rem)] overflow-hidden">
+            <CardContent className="h-[calc(100%-4rem)] overflow-hidden ">
               <div className="flex flex-col h-full">
                 <Input
                   type="search"
-                  placeholder="搜尋課程名稱、代碼或教師姓名..."
+                  placeholder={
+                    language === 'zh'
+                      ? "搜尋課程名稱、代碼或教師姓名..."
+                      : "Search course name, code or teacher..."
+                  }
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="mb-4"
                 />
                 <div className="flex-1 overflow-hidden">
                   <div className="flex justify-between items-center mb-2">
-                    <h3 className="font-semibold">可選課程</h3>
+                    <h3 className="font-semibold">{language === 'zh' ? '可選課程' : 'Available Courses'}</h3>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => setShowAvailableCourses(!showAvailableCourses)}
                       className="h-8 px-2"
                     >
-                      {showAvailableCourses ? '收合' : '展開'}
+                      {showAvailableCourses ? (language === 'zh' ? '收合' : 'Collapse') : (language === 'zh' ? '展開' : 'Expand')}
                     </Button>
                   </div>
                   {showAvailableCourses && (
@@ -250,12 +258,12 @@ const CourseScheduler = () => {
                               <div className="flex gap-2 items-center ml-2 flex-shrink-0">
                                 {isSelected && (
                                   <span className="text-yellow-500 text-xs px-1.5 py-0.5 bg-yellow-50 rounded">
-                                    已選
+                                    {language === 'zh' ? '已選' : 'Selected'}
                                   </span>
                                 )}
                                 {hasTimeConflict && (
                                   <span className="text-red-500 text-xs px-1.5 py-0.5 bg-red-50 rounded">
-                                    衝堂
+                                    {language === 'zh' ? '衝堂' : 'Conflict'}
                                   </span>
                                 )}
                               </div>
@@ -273,7 +281,7 @@ const CourseScheduler = () => {
           {/* 已選課程 Card */}
           <Card className={`mb-4 ${showAvailableCourses ? 'h-[50vh]' : ''}`}>
             <CardHeader>
-              <CardTitle>已選課程</CardTitle>
+              <CardTitle>{language === 'zh' ? '已選課程' : 'Selected Courses'}</CardTitle>
             </CardHeader>
             <CardContent className="h-[calc(100%-4rem)] overflow-hidden">
               <div className="h-full overflow-y-auto">
@@ -309,14 +317,21 @@ const CourseScheduler = () => {
           <Card className="lg:min-w-[640px]">
             <CardHeader className="flex-none">
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-                <CardTitle>週課表</CardTitle>
+                <CardTitle>{language === 'zh' ? '週課表' : 'Weekly Schedule'}</CardTitle>
                 {selectedCourses.length > 0 && (
                   <div className="text-sm text-muted-foreground">
                     {(() => {
                       const { totalCredits, totalHours } = calculateTotals(selectedCourses);
                       return (
                         <>
-                          <span className="font-bold">總學分</span>：{totalCredits.toFixed(1)} / <span className="font-bold">總時數</span>：{totalHours}
+                          <span className="font-bold">
+                            {language === 'zh' ? '總學分' : 'Credits'}
+                          </span>
+                          ：{totalCredits.toFixed(1)} / 
+                          <span className="font-bold">
+                            {language === 'zh' ? '總時數' : 'Hours'}
+                          </span>
+                          ：{totalHours}
                         </>
                       );
                     })()}
@@ -329,9 +344,16 @@ const CourseScheduler = () => {
                 <table className="w-full border-collapse table-fixed">
                   <thead className="sticky top-0 bg-white z-20">
                     <tr>
-                      <th className="border p-1 lg:p-2 w-8 lg:w-16 text-xs lg:text-base">節次</th>
-                      {days.map(day => (
-                        <th key={day} className="border p-1 lg:p-2 text-xs lg:text-base w-1/5">週{day}</th>
+                      <th className="border p-1 lg:p-2 w-8 lg:w-16 text-xs lg:text-base">
+                        {language === 'zh' ? '節次' : 'Period'}
+                      </th>
+                      {days.map((day, index) => (
+                        <th key={day} className="border p-1 lg:p-2 text-xs lg:text-base w-1/5">
+                          {language === 'zh' ? 
+                            `週${day}` : 
+                            daysInEnglish[index]
+                          }
+                        </th>
                       ))}
                     </tr>
                   </thead>
@@ -409,7 +431,7 @@ const CourseScheduler = () => {
       )}
       
       {isLoading && (
-        <div className="text-center py-4">載入中...</div>
+        <div className="text-center py-4">{language === 'zh' ? '載入中...' : 'Loading...'}</div>
       )}
     </div>
   );
