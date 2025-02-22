@@ -22,6 +22,7 @@ export async function GET(request: Request) {
             { 'name.zh': { $regex: new RegExp(query, 'i') } },
             { 'name.en': { $regex: new RegExp(query, 'i') } },
             { code: { $regex: new RegExp(query, 'i') } },
+            {"teacher.name": { $regex: new RegExp(query, 'i') },}
           ],
         }
       : {};

@@ -18,6 +18,13 @@ interface Course {
   courseType: string;
   credit: string;
   hours: string;
+  notes: string;
+  teacher:[{
+    name: string;
+    link: string;
+    code: string;}
+  ]
+  ;
   time: {
     sun: string[];
     mon: string[];
@@ -40,11 +47,14 @@ const getConsecutiveSlots = (
   slot: string,
   timeSlots: string[]
 ) => {
-  const slots = course.time[dayKey as keyof typeof course.time];
+  const slots = course.time[dayKey as keyof typeof course.time] || [];
   const currentIndex = timeSlots.indexOf(slot);
   let consecutiveCount = 1;
   
-  // Check next slots
+  // 檢查前面的時間格
+  const isStart = !slots.includes(timeSlots[currentIndex - 1]);
+  
+  // 檢查後面的連續時間格
   let nextIndex = currentIndex + 1;
   while (nextIndex < timeSlots.length && slots.includes(timeSlots[nextIndex])) {
     consecutiveCount++;
@@ -52,7 +62,7 @@ const getConsecutiveSlots = (
   }
   
   return {
-    isStart: !slots.includes(timeSlots[currentIndex - 1]),
+    isStart,
     consecutiveCount,
   };
 };
@@ -67,7 +77,7 @@ const calculateTotals = (courses: Course[]) => {
   );
 };
 
-const TestCourseScheduler = () => {
+const CourseScheduler = () => {
   const [availableCourses, setAvailableCourses] = useState<Course[]>([]);
   const [selectedCourses, setSelectedCourses] = useState<Course[]>([]);
   const [conflicts, setConflicts] = useState<string[]>([]);
@@ -157,11 +167,29 @@ const TestCourseScheduler = () => {
     setConflicts([]);
   }, []);
 
+  // 首先添加一個檢查衝突的函數
+  const checkCourseConflict = useCallback((course: Course) => {
+    // 檢查是否已選
+    const isSelected = selectedCourses.some(selected => selected.id === course.id);
+    // 檢查是否有時間衝突
+    const hasTimeConflict = selectedCourses.some(selected => 
+      selected.id !== course.id && checkTimeConflict(selected, course)
+    );
+    
+    return {
+      isSelected,
+      hasTimeConflict
+    };
+  }, [selectedCourses]);
+
   // We use the availableCourses state that now comes from our API.
   const filteredCourses = availableCourses.filter(course =>
     course.name.zh.toLowerCase().includes(searchQuery.toLowerCase()) ||
     course.name.en.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    course.code.toLowerCase().includes(searchQuery.toLowerCase())
+    course.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    course.teacher.some(teacher => 
+      teacher.name.toLowerCase().includes(searchQuery.toLowerCase())
+    )
   );
 
   const days = ['一', '二', '三', '四', '五'];
@@ -181,7 +209,7 @@ const TestCourseScheduler = () => {
               <div className="flex flex-col h-full">
                 <Input
                   type="search"
-                  placeholder="搜尋課程名稱或代碼..."
+                  placeholder="搜尋課程名稱、代碼或教師姓名..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="mb-4"
@@ -201,16 +229,39 @@ const TestCourseScheduler = () => {
                   {showAvailableCourses && (
                     <div className="h-full overflow-y-auto">
                       <div className="flex flex-col gap-2">
-                        {filteredCourses.map(course => (
-                          <Button
-                            key={course.id}
-                            onClick={() => addCourse(course)}
-                            className={`w-full justify-start ${getCourseColor(course.courseType)}`}
-                            variant="outline"
-                          >
-                            {course.name.zh} ({course.code})
-                          </Button>
-                        ))}
+                        {filteredCourses.map(course => {
+                          const { isSelected, hasTimeConflict } = checkCourseConflict(course);
+                          return (
+                            <Button
+                              key={course.id}
+                              onClick={() => addCourse(course)}
+                              className={`
+                                w-full justify-between 
+                                ${getCourseColor(course.courseType)}
+                                ${hasTimeConflict ? 'border-red-500 border-2' : ''}
+                                ${isSelected ? 'border-yellow-500 border-2' : ''}
+                              `}
+                              variant="outline"
+                              disabled={isSelected || hasTimeConflict}
+                            >
+                              <span className="truncate">
+                                {course.name.zh} ({course.code})
+                              </span>
+                              <div className="flex gap-2 items-center ml-2 flex-shrink-0">
+                                {isSelected && (
+                                  <span className="text-yellow-500 text-xs px-1.5 py-0.5 bg-yellow-50 rounded">
+                                    已選
+                                  </span>
+                                )}
+                                {hasTimeConflict && (
+                                  <span className="text-red-500 text-xs px-1.5 py-0.5 bg-red-50 rounded">
+                                    衝堂
+                                  </span>
+                                )}
+                              </div>
+                            </Button>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -275,12 +326,12 @@ const TestCourseScheduler = () => {
             </CardHeader>
             <CardContent className="p-0">
               <div className="h-full">
-                <table className="w-full border-collapse">
+                <table className="w-full border-collapse table-fixed">
                   <thead className="sticky top-0 bg-white z-20">
                     <tr>
                       <th className="border p-1 lg:p-2 w-8 lg:w-16 text-xs lg:text-base">節次</th>
                       {days.map(day => (
-                        <th key={day} className="border p-1 lg:p-2 text-xs lg:text-base">週{day}</th>
+                        <th key={day} className="border p-1 lg:p-2 text-xs lg:text-base w-1/5">週{day}</th>
                       ))}
                     </tr>
                   </thead>
@@ -291,25 +342,45 @@ const TestCourseScheduler = () => {
                         {days.map((day, index) => {
                           const dayKey = ['mon', 'tue', 'wed', 'thu', 'fri'][index];
                           return (
-                            <td key={`${day}-${slot}`} className="border p-0 h-12 lg:h-16 relative">
+                            <td key={`${day}-${slot}`} className="border p-0 h-16 relative">
                               {selectedCourses.map(course => {
-                                if (course.time[dayKey as keyof typeof course.time].includes(slot)) {
+                                const slots = course.time[dayKey as keyof typeof course.time] || [];
+                                if (slots.includes(slot)) {
                                   const { isStart, consecutiveCount } = getConsecutiveSlots(course, dayKey, slot, timeSlots);
                                   if (isStart) {
                                     return (
                                       <div 
                                         key={course.id} 
-                                        className={`${getCourseColor(course.courseType)} absolute inset-0 p-1 lg:p-2 overflow-hidden flex flex-col`}
+                                        className={`
+                                          ${getCourseColor(course.courseType)} 
+                                          absolute inset-0 
+                                          p-1 lg:p-2 
+                                          overflow-hidden 
+                                          flex flex-col
+                                          border-r border-b
+                                          hover:bg-opacity-90
+                                          transition-colors
+                                        `}
                                         style={{
-                                          height: `${consecutiveCount * 3}rem`,
-                                          zIndex: 10
+                                          height: `${consecutiveCount * 4}rem`,
+                                          zIndex: 10,
+                                          top: 0,
+                                          left: 0,
+                                          right: 0
                                         }}
                                       >
-                                        <div className="font-semibold leading-tight text-xs lg:text-base flex-grow">
-                                          {course.name.zh}
-                                        </div>
-                                        <div className="mt-0.5 lg:mt-1 truncate text-xs lg:text-sm">
-                                          {course.classroom.map(room => room.name).join(', ')}
+                                        <div className="flex flex-col justify-between h-full">
+                                          <div className="space-y-0.5">
+                                            <div className="font-semibold text-xs lg:text-sm line-clamp-2">
+                                              {course.name.zh}
+                                            </div>
+                                            <div className="text-xs text-gray-600 line-clamp-1">
+                                              {course.teacher.map(t => t.name).join(', ')}
+                                            </div>
+                                          </div>
+                                          <div className="text-xs text-gray-500 truncate">
+                                            {course.classroom.map(room => room.name).join(', ')}
+                                          </div>
                                         </div>
                                       </div>
                                     );
@@ -344,4 +415,4 @@ const TestCourseScheduler = () => {
   );
 };
 
-export default TestCourseScheduler;
+export default CourseScheduler;

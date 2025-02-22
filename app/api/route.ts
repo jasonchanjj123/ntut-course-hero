@@ -12,7 +12,7 @@ export async function GET(request: Request) {
     // 連接資料庫
     const client = await clientPromise;
     const db = client.db('113');
-    const collection = db.collection('1-main');
+    const collection = db.collection('2-main');
 
     // 建立搜尋條件
     const filter = query
@@ -21,6 +21,7 @@ export async function GET(request: Request) {
             { 'name.zh': { $regex: new RegExp(query, 'i') } },
             { 'name.en': { $regex: new RegExp(query, 'i') } },
             { code: { $regex: new RegExp(query, 'i') } },
+            {"teacher.name": { $regex: new RegExp(query, 'i') },}
           ],
         }
       : {};
