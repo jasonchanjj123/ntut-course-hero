@@ -96,7 +96,7 @@ const CourseScheduler = () => {
       setError(null);
       try {
         const queryParam = query ? `?q=${encodeURIComponent(query)}` : '';
-        const res = await fetch(`/api/${queryParam}`);
+        const res = await fetch(`/api/course/${queryParam}`);
         if (!res.ok) throw new Error('課程資料載入失敗');
         const data = await res.json();
         setAvailableCourses(data.courses);
