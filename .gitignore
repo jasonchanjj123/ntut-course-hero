@@ -42,3 +42,5 @@ next-env.d.ts
 /Data
 test.tsx
 /app/test
+/app/services
+/services

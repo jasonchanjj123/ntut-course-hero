@@ -89,7 +89,7 @@ const CourseScheduler = () => {
   const [error, setError] = useState<string | null>(null);
   const [showAvailableCourses, setShowAvailableCourses] = useState(true);
 
-  // 實作去抖動的搜尋
+  // 修改 debouncedFetch 函數的錯誤處理
   const debouncedFetch = useCallback(
     debounce(async (query: string) => {
       setIsLoading(true);
@@ -97,17 +97,21 @@ const CourseScheduler = () => {
       try {
         const queryParam = query ? `?q=${encodeURIComponent(query)}` : '';
         const res = await fetch(`/api/course/${queryParam}`);
-        if (!res.ok) throw new Error('課程資料載入失敗');
+        if (!res.ok) throw new Error(language === 'zh' ? '課程資料載入失敗' : 'Failed to load courses');
         const data = await res.json();
         setAvailableCourses(data.courses);
       } catch (err) {
-        setError(err instanceof Error ? err.message : '發生未知錯誤');
-        console.error('Failed to fetch courses:', err);
+        console.error('Database error:', err);
+        setError(
+          language === 'zh' 
+            ? '資料庫連線失敗，請稍後再試' 
+            : 'Database connection failed, please try again later'
+        );
       } finally {
         setIsLoading(false);
       }
     }, 300),
-    []
+    [language]
   );
 
   useEffect(() => {
@@ -424,7 +428,7 @@ const CourseScheduler = () => {
       </div>
 
       {error && (
-        <Alert variant="destructive" className="mb-4">
+        <Alert variant="destructive" className="fixed bottom-4 right-4 w-auto max-w-md">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
